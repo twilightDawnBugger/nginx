@@ -265,7 +265,7 @@ case "$1" in
 esac
 
 ```
-使用systemctl管理服务(nginx)
+使用systemctl管理服务(nginx)（这种方法没有问题）
  
 
 首先调整好路径信息，修改配置文件
