@@ -110,7 +110,7 @@ firewall-cmd --zone=public --add-port=80/tcp --permanent
 
 systemctl restart firewalld.service
 ## 启动服务
-
+（有问题用更下面的方法）
 ### 脚本自启动
 
 拷贝附件提供的Nginx启动脚本文件内容到`/etc/init.d/nginx`这个文件中
@@ -265,6 +265,139 @@ case "$1" in
 esac
 
 ```
+使用systemctl管理服务(nginx)
+ 
+
+首先调整好路径信息，修改配置文件
+vim /usr/lib/systemd/system/nginx.service
+
+[Unit]
+Description=The nginx HTTP and reverse proxy server
+After=syslog.target network.target remote-fs.target nss-lookup.target
+
+[Service]
+Type=forking
+PIDFile=/var/run/nginx.pid
+ExecStartPre=/usr/sbin/nginx -t -c /etc/nginx/nginx.conf
+ExecStart=/usr/sbin/nginx -c /etc/nginx/nginx.conf
+ExecReload=/usr/sbin/nginx -s reload
+ExecStop=/usr/sbin/nginx -s stop
+ExecQuit=/usr/sbin/nginx -s quit
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+
+由于进程已经存在，编辑好之后，执行启动命令是失败的。
+[root@mcw1 ~]# systemctl status nginx
+● nginx.service - The nginx HTTP and reverse proxy server
+Loaded: loaded (/usr/lib/systemd/system/nginx.service; disabled; vendor preset: disabled)
+Active: failed (Result: exit-code) since Fri 2021-11-12 09:15:54 CST; 51s ago
+Process: 2378 ExecStart=/usr/sbin/nginx -c /etc/nginx/nginx.conf (code=exited, status=1/FAILURE)
+Process: 2376 ExecStartPre=/usr/sbin/nginx -t -c /etc/nginx/nginx.conf (code=exited, status=0/SUCCESS)
+
+Nov 12 09:15:53 mcw1 nginx[2378]: nginx: [emerg] bind() to [::]:80 failed (98: Address already in use)
+Nov 12 09:15:53 mcw1 nginx[2378]: nginx: [emerg] bind() to 0.0.0.0:80 failed (98: Address already in use)
+Nov 12 09:15:53 mcw1 nginx[2378]: nginx: [emerg] bind() to [::]:80 failed (98: Address already in use)
+Nov 12 09:15:54 mcw1 nginx[2378]: nginx: [emerg] bind() to 0.0.0.0:80 failed (98: Address already in use)
+Nov 12 09:15:54 mcw1 nginx[2378]: nginx: [emerg] bind() to [::]:80 failed (98: Address already in use)
+Nov 12 09:15:54 mcw1 systemd[1]: nginx.service: control process exited, code=exited status=1
+Nov 12 09:15:54 mcw1 nginx[2378]: nginx: [emerg] still could not bind()
+Nov 12 09:15:54 mcw1 systemd[1]: Failed to start The nginx HTTP and reverse proxy server.
+Nov 12 09:15:54 mcw1 systemd[1]: Unit nginx.service entered failed state.
+Nov 12 09:15:54 mcw1 systemd[1]: nginx.service failed.
+
+手动执行检查命令，发现是被占用的，也就是由于nginx已经是启动状态，无论怎么弄都不行
+[root@mcw1 ~]# /usr/sbin/nginx -c /etc/nginx/nginx.conf
+nginx: [emerg] bind() to 0.0.0.0:80 failed (98: Address already in use)
+nginx: [emerg] bind() to [::]:80 failed (98: Address already in use)
+nginx: [emerg] bind() to 0.0.0.0:80 failed (98: Address already in use)
+nginx: [emerg] bind() to [::]:80 failed (98: Address already in use)
+nginx: [emerg] bind() to 0.0.0.0:80 failed (98: Address already in use)
+nginx: [emerg] bind() to [::]:80 failed (98: Address already in use)
+
+把nginx服务停掉
+[root@mcw1 ~]# ps -ef|grep nginx
+root 1925 1 0 08:33 ? 00:00:00 nginx: master process nginx
+nginx 2220 1925 0 09:10 ? 00:00:00 nginx: worker process
+root 2411 1829 0 09:19 pts/0 00:00:00 grep --color=auto nginx
+[root@mcw1 ~]# kill 1925
+[root@mcw1 ~]# ps -ef|grep nginx
+root 2413 1829 0 09:19 pts/0 00:00:00 grep --color=auto nginx
+[root@mcw1 ~]#
+
+用systemctl启动nginx
+[root@mcw1 ~]# systemctl start nginx
+
+这时查看进程是没有问题的
+[root@mcw1 ~]# systemctl status nginx
+● nginx.service - The nginx HTTP and reverse proxy server
+Loaded: loaded (/usr/lib/systemd/system/nginx.service; disabled; vendor preset: disabled)
+Active: active (running) since Fri 2021-11-12 09:20:03 CST; 3s ago
+Process: 2511 ExecStart=/usr/sbin/nginx -c /etc/nginx/nginx.conf (code=exited, status=0/SUCCESS)
+Process: 2510 ExecStartPre=/usr/sbin/nginx -t -c /etc/nginx/nginx.conf (code=exited, status=0/SUCCESS)
+Main PID: 2514 (nginx)
+CGroup: /system.slice/nginx.service
+├─2514 nginx: master process /usr/sbin/nginx -c /etc/nginx/nginx.conf
+└─2515 nginx: worker process
+
+Nov 12 09:20:03 mcw1 systemd[1]: Starting The nginx HTTP and reverse proxy server...
+Nov 12 09:20:03 mcw1 nginx[2510]: nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+Nov 12 09:20:03 mcw1 nginx[2510]: nginx: configuration file /etc/nginx/nginx.conf test is successful
+Nov 12 09:20:03 mcw1 systemd[1]: Started The nginx HTTP and reverse proxy server.
+
+用systemctl停掉nginx，也米有问题
+[root@mcw1 ~]# systemctl stop nginx
+[root@mcw1 ~]# systemctl status nginx
+● nginx.service - The nginx HTTP and reverse proxy server
+Loaded: loaded (/usr/lib/systemd/system/nginx.service; disabled; vendor preset: disabled)
+Active: inactive (dead)
+
+Nov 12 09:17:01 mcw1 systemd[1]: nginx.service failed.
+Nov 12 09:20:03 mcw1 systemd[1]: Starting The nginx HTTP and reverse proxy server...
+Nov 12 09:20:03 mcw1 nginx[2510]: nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+Nov 12 09:20:03 mcw1 nginx[2510]: nginx: configuration file /etc/nginx/nginx.conf test is successful
+Nov 12 09:20:03 mcw1 systemd[1]: Started The nginx HTTP and reverse proxy server.
+Nov 12 09:20:23 mcw1 systemd[1]: Stopping The nginx HTTP and reverse proxy server...
+Nov 12 09:20:23 mcw1 systemd[1]: Stopped The nginx HTTP and reverse proxy server.
+Nov 12 09:20:23 mcw1 systemd[1]: [/usr/lib/systemd/system/nginx.service:12] Unknown lvalue 'ExecQuit' in section 'Service'
+Nov 12 09:20:23 mcw1 systemd[1]: [/usr/lib/systemd/system/nginx.service:12] Unknown lvalue 'ExecQuit' in section 'Service'
+Nov 12 09:20:26 mcw1 systemd[1]: [/usr/lib/systemd/system/nginx.service:12] Unknown lvalue 'ExecQuit' in section 'Service'
+
+用systemctl启动和重启nginx，都米有问题
+[root@mcw1 ~]# systemctl start nginx
+[root@mcw1 ~]# systemctl restart nginx
+[root@mcw1 ~]# systemctl status nginx
+● nginx.service - The nginx HTTP and reverse proxy server
+Loaded: loaded (/usr/lib/systemd/system/nginx.service; disabled; vendor preset: disabled)
+Active: active (running) since Fri 2021-11-12 09:20:38 CST; 4s ago
+Process: 2548 ExecStop=/usr/sbin/nginx -s stop (code=exited, status=0/SUCCESS)
+Process: 2554 ExecStart=/usr/sbin/nginx -c /etc/nginx/nginx.conf (code=exited, status=0/SUCCESS)
+Process: 2553 ExecStartPre=/usr/sbin/nginx -t -c /etc/nginx/nginx.conf (code=exited, status=0/SUCCESS)
+Main PID: 2556 (nginx)
+CGroup: /system.slice/nginx.service
+├─2556 nginx: master process /usr/sbin/nginx -c /etc/nginx/nginx.conf
+└─2557 nginx: worker process
+
+Nov 12 09:20:38 mcw1 systemd[1]: Starting The nginx HTTP and reverse proxy server...
+Nov 12 09:20:38 mcw1 nginx[2553]: nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+Nov 12 09:20:38 mcw1 nginx[2553]: nginx: configuration file /etc/nginx/nginx.conf test is successful
+Nov 12 09:20:38 mcw1 systemd[1]: Started The nginx HTTP and reverse proxy server.
+[root@mcw1 ~]#
+
+
+用systemctl停掉nginx。然后直接用命令启动nginx。再使用systemctl重启管理，这下子就不行了。
+[root@mcw1 ~]# systemctl stop nginx.service
+[root@mcw1 ~]# nginx
+[root@mcw1 ~]# systemctl restart nginx.service
+Job for nginx.service failed because the control process exited with error code. See "systemctl status nginx.service" and "journalctl -xe" for details.
+[root@mcw1 ~]#
+
+总结：也就是如果用systemtl管理的话，后面也用systemctl就行，直接用命令启停服务，也可以。但是两者交叉管理服务，很有可能出问题
+
+根据报错提示查看错误详情。显示有地址已经在使用的错误信息，说明服务已经启动了，但是命令直接启动的，没有用systemctl启动，所以后面的查看，启动，重启，等操作用systemctl会出错。
+
+
 
 ## Nginx配置解析
 
