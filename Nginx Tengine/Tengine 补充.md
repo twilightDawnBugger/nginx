@@ -198,7 +198,18 @@ https://sourceforge.net/projects/xca/
  openssl x509 -req -days 365 -in server.csr -signkey server.key.unsecure -out server.crt
 
 ```
+nginx启动报错处理：密码错误
 
+SSL_CTX_use_PrivateKey_file("/etc/nginx/key/server.key") failed 
+(SSL: error:0906406D:PEM routines:PEM_def_callback:problems getting password error:0906A068:PEM routines:PEM_do_header:bad password read error:140B0009:SSL routines:SSL_CTX_use_PrivateKey_file:PEM lib) 
+1
+2
+# 输入一次私钥的密码
+openssl rsa -in server.key -out unserver.key 
+
+cp unserver.key server.key
+
+# 重启nginx
 查看证书
 
 ```
